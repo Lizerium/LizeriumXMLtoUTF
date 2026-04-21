@@ -29,14 +29,14 @@
 >
 > If you're looking for related engineering and support tools, start there.
 
-## 🐉 Status
+## Status
 
 > [!WARNING]
 > The project is currently **in development**
 
 ---
 
-## 🌱 Description
+## Description
 
 `UTFXML.exe` — tool for packing:
 
@@ -47,7 +47,7 @@
 
 ---
 
-## 🧠 TODO
+## TODO
 
 > [!TIP]
 > Planned improvements:
@@ -56,18 +56,18 @@
 
 ---
 
-## 🛠 Build
+## Build
 
 > [!IMPORTANT]
 > Uses legacy toolchain for compatibility
 
 - **IDE:** Visual Studio `2008`
-- Mode: `Release`
-- Steps:
-  - open project
-  - build
-  - done
+- **Mode:** Release
+
+Steps:
+
+1. Open project
+2. Build
+3. Done
 
 ---
-
-<p align="center">🐟 Lightweight tool for UTF asset processing 🐟</p>
