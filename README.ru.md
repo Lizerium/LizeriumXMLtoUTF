@@ -45,6 +45,9 @@
 - `.mat`
 - `.txm`
 
+> [!TIP]
+> [Что это такое](docs/WHAT.ru.md)
+
 ---
 
 ## TODO
