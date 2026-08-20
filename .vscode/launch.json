@@ -1,0 +1,15 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug XMLUTF",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}\\XMLUTF\\Debug\\XMLUTF.exe",
+			"cwd": "${workspaceFolder}\\XMLUTF\\Debug",
+			"stopAtEntry": false,
+			"console": "internalConsole",
+			"preLaunchTask": "Build XMLUTF Debug"
+		}
+	]
+}

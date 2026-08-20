@@ -56,13 +56,27 @@ BEGIN_MESSAGE_MAP(ProgressDialog, CDialog)
 END_MESSAGE_MAP()
 
 
-void ProgressDialog::OnCancel() 
+void ProgressDialog::OnCancel()
 {
     m_Parent->m_ConversionAborted = true;
 
-    CDialog::OnCancel();
-}
+    SetDlgItemText(
+        IDC_STATUS,
+        "Aborting conversion..."
+    );
 
+    CWnd* abortButton = GetDlgItem(IDCANCEL);
+
+    if (abortButton)
+    {
+        abortButton->EnableWindow(FALSE);
+    }
+
+    // Do not call CDialog::OnCancel().
+    // The worker thread finishes on its own,
+    // m_ConversionInProgress will become false,
+    // and OnTimer will close the dialog.
+}
 
 BOOL ProgressDialog::OnInitDialog() 
 {
@@ -90,40 +104,89 @@ void ProgressDialog::OnTimer(UINT nIDEvent)
 {
     if (nIDEvent == 1)
     {
-        char source_path[MAX_PATH];
-	    EnterCriticalSection(&m_Parent->m_Mutex);
-        int file_count = m_Parent->m_XmlFileCount;
-        int files_opened = m_Parent->m_NumXmlFilesOpened;
-        strcpy(source_path, m_Parent->m_CurrentSourcePath + m_Parent->m_PathTrim);
-	    LeaveCriticalSection(&m_Parent->m_Mutex);
+        char source_path[MAX_PATH] = { 0 };
 
-        // Has the background thread finished counting the files?
-        if (file_count)
+        int file_count = 0;
+        int files_opened = 0;
+        bool conversion_in_progress = false;
+
+        EnterCriticalSection(&m_Parent->m_Mutex);
+
+        file_count = m_Parent->m_XmlFileCount;
+        files_opened = m_Parent->m_NumXmlFilesOpened;
+        conversion_in_progress = m_Parent->m_ConversionInProgress;
+
+        strcpy_s(
+            source_path,
+            MAX_PATH,
+            m_Parent->m_CurrentSourcePath + m_Parent->m_PathTrim
+        );
+
+        LeaveCriticalSection(&m_Parent->m_Mutex);
+
+        if (file_count > 0)
         {
-            // Yes, display the conversion percent progress
             CString status;
-            status.Format("Processed %d of %d XML files (%d%%)", files_opened, file_count, int(100*files_opened/file_count));
-			SetDlgItemText(IDC_STATUS, status);
-            m_ProgressCtrl.SetRange(0, file_count);
-            m_ProgressCtrl.SetPos(files_opened);
-            // Have all files been processed?
-            if (file_count == files_opened)
+
+            int percent = 0;
+
+            if (file_count > 0)
             {
-                // Done! Close the dialog and continue
-                Sleep(1000);
-                OnOK();
-                return;
+                percent = int(
+                    100LL * files_opened / file_count
+                );
+
+                if (percent > 100)
+                    percent = 100;
             }
+
+            status.Format(
+                "Processed %d of %d XML files (%d%%)",
+                files_opened,
+                file_count,
+                percent
+            );
+
+            SetDlgItemText(IDC_STATUS, status);
+
+            m_ProgressCtrl.SetRange32(0, file_count);
+            m_ProgressCtrl.SetPos(
+                min(files_opened, file_count)
+            );
         }
         else
         {
             CString status;
-            status.Format("Counting XML files... (%d)", files_opened);
-			SetDlgItemText(IDC_STATUS, status);
+
+            status.Format(
+                "Counting XML files... (%d)",
+                files_opened
+            );
+
+            SetDlgItemText(IDC_STATUS, status);
         }
 
-        // Display the current source path
-		SetDlgItemText(IDC_PATH, source_path);
+        SetDlgItemText(
+            IDC_PATH,
+            source_path
+        );
+
+        // IMPORTANT:
+        // Close ProgressDialog only when the worker has truly finished.
+        if (!conversion_in_progress)
+        {
+            KillTimer(1);
+
+            m_ProgressCtrl.SetPos(file_count);
+
+            SetDlgItemText(
+                IDC_STATUS,
+                "Conversion complete"
+            );
+
+            OnOK();
+            return;
+        }
     }
 
     CDialog::OnTimer(nIDEvent);

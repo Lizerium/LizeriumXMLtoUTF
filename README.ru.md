@@ -1,11 +1,15 @@
 <p align="center">✨Dvurechensky✨</p>
 
-<h1 align="center">🐟 UTF to XML Конвертер 🐟</h1>
+<h1 align="center">🐟 XML to UTF Конвертер 🐟</h1>
 
 <p align="center">
     <img src="https://shields.dvurechensky.pro/badge/Status-In%20Development-yellow">
     <img src="https://shields.dvurechensky.pro/badge/Freelancer-2003-green">
     <img src="https://shields.dvurechensky.pro/badge/C%2B%2B-VS2008-purple">
+</p>
+
+<p align="center">
+    <img src="MEDIA/what.png">
 </p>
 
 <div align="center" style="margin: 20px 0; padding: 10px; background: #1c1917; border-radius: 10px;">
@@ -29,10 +33,31 @@
 >
 > Если вы ищете связанные инженерные и вспомогательные инструменты — начните оттуда.
 
-## Статус
+---
 
-> [!WARNING]
-> Проект находится **в разработке**
+## Благодарности
+
+> [!NOTE]
+> Этот проект основан на работе сообщества Freelancer.  
+> Переработан и интегрирован в экосистему Lizerium.
+>
+> Основано на работе [`Jason Hood (adoxa)`](https://adoxa.altervista.org/freelancer/index.html)
+> Полный список [авторов](CREDITS.md)
+
+---
+
+## Моя версия
+
+> [!TIP]
+> Это **кастомная переработанная версия**, созданная под мои собственные задачи. Однако список изменений вы можете найти в [CHANGELOG](CHANGELOG.ru.md)
+
+---
+
+## Запуск отладочной версии
+
+- Visual Code (Кликни на Play)
+
+![debug](MEDIA/debug.png)
 
 ---
 
@@ -50,22 +75,22 @@
 
 ---
 
-## TODO
-
-> [!TIP]
-> Планируемые улучшения:
-
-- Поддержка блока `Animations` при упаковке
-
----
-
 ## Сборка
 
+### Visual Studio 2022 && Visual Code
+
+> Важно наличие в системе `Visual Studio 2022` и его компоненты `Developer Command Prompt for VS 2022`
+
+1. Открыть `Visual Code` -> `Terminal`
+2. [`Сборка`](build.bat)
+
+### Visual Studio 2008
+
 > [!IMPORTANT]
-> Используется legacy toolchain для совместимости
+> Используется старый toolchain для максимальной совместимости.
 
 - **IDE:** Visual Studio `2008`
-- **Режим:** Release
+- Конфигурация: `Release`
 
 Шаги:
 
@@ -74,3 +99,10 @@
 3. Готово
 
 ---
+
+## Связанные направления
+
+Этот слой связан с:
+
+- [`Lizerium.DataValidation.Framework`](https://github.com/Lizerium/Lizerium.DataValidation.Framework)
+- [`LizeriumXMLtoUTF`](https://github.com/Lizerium/LizeriumXMLtoUTF)

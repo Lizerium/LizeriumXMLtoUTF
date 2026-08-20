@@ -73,10 +73,10 @@ struct UTFNodeEntry
     char *data_filename;
     char *data_path;
     BYTE *data;
-	DWORD unk;
-	DWORD time1;
-	DWORD time2;
-	DWORD time3;
+		DWORD unk;
+		DWORD time1;
+		DWORD time2;
+		DWORD time3;
     DWORD data_size;
     DWORD data_alloc;
     UTFNodeEntry *child;
@@ -246,6 +246,9 @@ protected:
 	afx_msg void OnHelpButton();
 	afx_msg void OnBrowseXmlFilename();
 	afx_msg void OnSelchangeXmlFilenames();
+	afx_msg void OnBrowseSourcePath();
+	afx_msg void OnBrowseDestinationPath();
+
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 
@@ -255,61 +258,61 @@ public:
 private:
     void   ProcessFolder(LPCSTR folder);
     void   ProcessXmlFile(LPCSTR filename);
-	void   OpenIncludeFile(LPCSTR filename);
-	void   WriteUtfFile(LPCSTR filename, DWORD *unk, FILETIME *ft);
+		void   OpenIncludeFile(LPCSTR filename);
+		void   WriteUtfFile(LPCSTR filename, DWORD *unk, FILETIME *ft);
     void   ReadXML();
     void   SkipSpaces();
     void   SkipXmlTag();
     char * GetXmlName();
     char * GetXmlAttr(char *tag);
-	bool   IsTag();
-	bool   IsTag(LPCSTR tag, bool fail = false);
+		bool   IsTag();
+		bool   IsTag(LPCSTR tag, bool fail = false);
     void   CreateAndSetPath(const char * utf_path);
     void   Log(char *format, ...);
     void   ProcessXmlBranch(UTFNodeEntry * pParentNode);
     void   ProcessXmlLeaf(char *xml_name, char *name, char *type);
     void   DestroyTree(UTFNodeEntry * branch);
     void   ProcessText();
-	void   ProcessByte();
-	void   ProcessShort();
+		void   ProcessByte();
+		void   ProcessShort();
     void   ProcessInt(int size);
     void   ProcessInt();
     void   ProcessFloat(int size);
-	void   ProcessFloat();
-	void   ProcessRGB();
+		void   ProcessFloat();
+		void   ProcessRGB();
     void   ProcessHex(int size);
-	void   ProcessVMeshData();
-	void   ProcessVWireData();
-	void   ProcessVMeshRef();
-	void   ProcessHeader();
-	void   ProcessFrames();
-	void   ProcessFix();
-	void   ProcessRev();
-	void   ProcessCyl();
-	void   ProcessSphere();
-	void   ProcessFrame_rects();
-	void   ProcessALEffectLib();
-	void   ProcessAlchemyNodeLibrary();
-	bool   do_Single(Store& data);
-	DWORD  GetCRC(bool ignore = true);
+		void   ProcessVMeshData();
+		void   ProcessVWireData();
+		void   ProcessVMeshRef();
+		void   ProcessHeader();
+		void   ProcessFrames();
+		void   ProcessFix();
+		void   ProcessRev();
+		void   ProcessCyl();
+		void   ProcessSphere();
+		void   ProcessFrame_rects();
+		void   ProcessALEffectLib();
+		void   ProcessAlchemyNodeLibrary();
+		bool   do_Single(Store& data);
+		DWORD  GetCRC(bool ignore = true);
     DWORD  GetDWORD();
     WORD   GetWORD();
-	BYTE   GetBYTE();
+		BYTE   GetBYTE();
     float  GetFloat();
     BYTE   GetHex();
-	bool   GetByte(BYTE *byte);
-	char * GetNumeric(bool is_float);
-	char * GetString();
-	void   GetVector(Vector& vec);
-	void   GetMatrix(Matrix& mtx);
+		bool   GetByte(BYTE *byte);
+		char * GetNumeric(bool is_float);
+		char * GetString();
+		void   GetVector(Vector& vec);
+		void   GetMatrix(Matrix& mtx);
     int    ProcessUtfNode(UTFNodeEntry *node);
     int    AddUtfString(char *string);
     void   WriteUtfData(UTFNodeEntry *node);
-	DWORD  GetHexAttr(char *attr);
-	float  GetFloatAttr(char *attr);
-	DWORD  GetTimeAttr(char *attr);
-	bool   GetFileTimeAttr(char *attr, FILETIME &ft);
-	void   EulerMatrix(const Vector &rot);
+		DWORD  GetHexAttr(char *attr);
+		float  GetFloatAttr(char *attr);
+		DWORD  GetTimeAttr(char *attr);
+		bool   GetFileTimeAttr(char *attr, FILETIME &ft);
+		void   EulerMatrix(const Vector &rot);
 
 public:
     bool   m_ConversionAborted;
@@ -322,6 +325,7 @@ public:
     int    m_NumXmlFilesOpened;
     int    m_NumUtfFilesCreated;
     char   m_CurrentSourcePath[MAX_PATH];
+		CWinThread* m_pConversionThread;
     // end of public attributes protected by the mutex
 
 private:
@@ -345,20 +349,20 @@ private:
     int    m_UtfDataOffset;
     char **m_UtfStringArray;
     int  * m_UtfStringOffset;
-	StrMap m_StrMap;
+		StrMap m_StrMap;
     UTFNode *m_UtfNode;
     DWORD  m_UtfFileSize;
-	bool   m_StringFirst;
-	bool   m_PrePadData;
-	DWORD  m_time1, m_time2, m_time3;
-    char * m_ExporterVersion;
-	Header * m_AnimHeader;
-	char * m_string;
-	size_t m_strcap;
-	bool   m_deg;
-	float  m_matrix[9];
-	int	   m_mtxidx;
-	bool   m_Quiet;
+		bool   m_StringFirst;
+		bool   m_PrePadData;
+		DWORD  m_time1, m_time2, m_time3;
+			char * m_ExporterVersion;
+		Header * m_AnimHeader;
+		char * m_string;
+		size_t m_strcap;
+		bool   m_deg;
+		float  m_matrix[9];
+		int	   m_mtxidx;
+		bool   m_Quiet;
 };
 
 //{{AFX_INSERT_LOCATION}}

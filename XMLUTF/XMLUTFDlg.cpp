@@ -4,13 +4,17 @@
  *
  *		XML to Freelancer UTF Conversion Utility
  *
- *		Written by Sir Lancelot (a.k.a. Sirlancelot, Elviis, Yud, vEct0r)
+ *		Written by Sir Lancelot (a.k.a. Sirlancelot, Elviis, Yud, vEct0r) & Adoxa & Dvurechensky
  *		email: elvviis@hotmail.com (or elvviis@yahoo.com)
  *		Placed in the Public Domain on 05-Nov-2004
  *
  *		Updated by Jason Hood (a.k.a adoxa)
  *		email: jadoxa@yahoo.com.au
  *		http://freelancer.adoxa.cjb.net/
+ *		
+ *		Updated by Dvurechensky
+ *		email: nikolay@dvurechensky.pro
+ *		https://dvurechensky.pro/
  *
  *
  * ----------------------------------------------------------------------------
@@ -43,6 +47,7 @@
  *			   email: lancerfree2003@yahoo.com (Emperor Tuna)
  *			   email: CoolGuy7432@hotmail.com (Jadean)
  *			   email: elvviis@hotmail.com (Sirlancelot)
+ *			   email: nikolay@dvurechensky.pro (Dvurechensky)
  *
  *		Source code files for additional utilities are posted on:
  *			http://games.groups.yahoo.com/group/beyondearth/
@@ -54,55 +59,6 @@
  *		Enable the HELP button and provide some help!
  *		If "stringfirst" attribute was set in the UTFXML tag, put the String
  *		   Segment before the Tree Segment.
- *
- * ----------------------------------------------------------------------------
- * CREDITS:
- *
- *		For researching/publishing of UTF and VMeshRef structs, fl_crc32
- *		  Mario "HCl" Brito (mbrito@student.dei.uc.pt)
- *		  Matthew "dizzy" Ruggiero
- *		For FLModelTool, FLAddRadius, CMP Exporter, SUR file structs
- *		  Colin Sandby, Harrier, Anton (hitchhiker54@yahoo.com), Twex,
- *		  Phantom Fox, Free Spirit, Dr Del, CCCP, shsan, Skyshooter, Brutus
- *
- *		Sorry I don't exactly know who did what, but they all did something
- *		which paved the way for this utility.  If I left anyone out, please
- *		email me at the above email address and I will update the list.
- *
- *
- * ----------------------------------------------------------------------------
- * REVISION HISTORY:
- *
- *		04-Nov-2004  V1.0a Sir Lancelot
- *							Original design and implementation
- *		06-Nov-2004  V1.1  Sir Lancelot
- *							Check resulting UTF file size against the original file size.
- *							Parse "unk234" attribute
- *
- *		14-Feb-2010  V2.0  Jason Hood
- *							NOT COMPATIBLE with earlier version.
- *							Don't exit automatically.
- *							Create the destination path (final directory only).
- *							Ignore case more often.
- *							Allow multi-line comments.
- *							New attribute "hash", used to generate the hash code
- *								for new audio entries.
- *
- *		21-Mar-2010  V2.1  Jason Hood
- *							Removed compatibility code (although "stringfirst" and
- *								"prepaddata" will still work).
- *							Ignore tabs.
- *							Fixed multi-line comments.
- *
- *		18-Aug-2010	 V2.2  Jason Hood
- *							Fixed integer ALE RGB conversions.
- *							Continue if Freelancer not apparently installed.
- *							Recognise name for Alchemy type values.
- *							Recognise Q for quaternion values.
- *							Command line options.
- *							Add the summary to the log.
- *							Create the complete destination path.
- *							Write the log to the temporary directory.
  *
  ******************************************************************************/
 
@@ -117,13 +73,13 @@
 #include "ProgressDialog.h"
 #include "store.h"
 #include <cmath>
-
+#include <stdio.h>
 
 //////////////////////////////////////////////////////////////////////
 // Definitions
 //////////////////////////////////////////////////////////////////////
 
-#define XMLUTF_VERSION	"XMLUTF Version 2.2 built 19-Aug-2010"
+#define XMLUTF_VERSION	"XMLUTF Version 3.0 built 19-Aug-2010"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -267,6 +223,126 @@ void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 	//}}AFX_DATA_MAP
 }
 
+bool SelectFolderModern(HWND owner, CString& outPath)
+{
+	HRESULT initHr = CoInitializeEx(
+		NULL,
+		COINIT_APARTMENTTHREADED
+	);
+
+	bool shouldUninitialize = SUCCEEDED(initHr);
+
+	if (initHr == S_FALSE)
+		shouldUninitialize = true;
+
+	if (FAILED(initHr) && initHr != RPC_E_CHANGED_MODE)
+	{
+		CString msg;
+		msg.Format(
+			"CoInitializeEx failed.\nHRESULT: 0x%08X",
+			initHr
+		);
+
+		MessageBox(owner, msg, "COM Error", MB_OK | MB_ICONERROR);
+		return false;
+	}
+
+	IFileDialog* pFileDialog = NULL;
+
+	HRESULT hr = CoCreateInstance(
+		CLSID_FileOpenDialog,
+		NULL,
+		CLSCTX_INPROC_SERVER,
+		IID_PPV_ARGS(&pFileDialog)
+	);
+
+	if (FAILED(hr))
+	{
+		if (shouldUninitialize)
+			CoUninitialize();
+
+		return false;
+	}
+
+	DWORD options = 0;
+
+	if (SUCCEEDED(pFileDialog->GetOptions(&options)))
+	{
+		pFileDialog->SetOptions(
+			options |
+			FOS_PICKFOLDERS |
+			FOS_FORCEFILESYSTEM |
+			FOS_PATHMUSTEXIST
+		);
+	}
+
+	pFileDialog->SetTitle(L"Select folder");
+
+	hr = pFileDialog->Show(owner);
+
+	if (FAILED(hr))
+	{
+		pFileDialog->Release();
+
+		if (shouldUninitialize)
+			CoUninitialize();
+
+		return false;
+	}
+
+	IShellItem* pItem = NULL;
+	hr = pFileDialog->GetResult(&pItem);
+
+	if (FAILED(hr))
+	{
+		pFileDialog->Release();
+
+		if (shouldUninitialize)
+			CoUninitialize();
+
+		return false;
+	}
+
+	PWSTR pszPath = NULL;
+
+	hr = pItem->GetDisplayName(
+		SIGDN_FILESYSPATH,
+		&pszPath
+	);
+
+	if (SUCCEEDED(hr) && pszPath != NULL)
+	{
+#ifdef UNICODE
+		outPath = pszPath;
+#else
+		char buffer[MAX_PATH] = { 0 };
+
+		int result = WideCharToMultiByte(
+			CP_ACP,
+			0,
+			pszPath,
+			-1,
+			buffer,
+			MAX_PATH,
+			NULL,
+			NULL
+		);
+
+		if (result > 0)
+			outPath = buffer;
+#endif
+
+		CoTaskMemFree(pszPath);
+	}
+
+	pItem->Release();
+	pFileDialog->Release();
+
+	if (shouldUninitialize)
+		CoUninitialize();
+
+	return SUCCEEDED(hr) && !outPath.IsEmpty();
+}
 
 BOOL CAboutDlg::OnInitDialog() 
 {
@@ -303,6 +379,7 @@ XMLUTFDlg::XMLUTFDlg(CWnd* pParent /*=NULL*/)
 	m_ConversionInProgress = false;
 	m_string = NULL;
 	m_strcap = 0;
+	m_pConversionThread = NULL;
 }
 
 
@@ -326,6 +403,8 @@ BEGIN_MESSAGE_MAP(XMLUTFDlg, CDialog)
 	ON_BN_CLICKED(IDC_CONVERT, OnConvert)
 	ON_BN_CLICKED(IDC_HELP_BUTTON, OnHelpButton)
 	ON_BN_CLICKED(IDC_BROWSE_XML_FILENAME, OnBrowseXmlFilename)
+	ON_BN_CLICKED(IDC_BROWSE_SOURCE_PATH, OnBrowseSourcePath)
+	ON_BN_CLICKED(IDC_BROWSE_DESTINATION_PATH, OnBrowseDestinationPath)
 	ON_CBN_SELCHANGE(IDC_XML_FILENAMES, OnSelchangeXmlFilenames)
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
@@ -334,21 +413,96 @@ END_MESSAGE_MAP()
 /////////////////////////////////////////////////////////////////////////////
 // XMLUTFDlg message handlers
 
+void XMLUTFDlg::OnBrowseSourcePath()
+{
+	CString selectedPath;
+
+	if (!SelectFolderModern(m_hWnd, selectedPath))
+		return;
+
+	m_SourcePath = selectedPath;
+	SetDlgItemText(IDC_SOURCE_PATH, m_SourcePath);
+
+	HKEY hKey = NULL;
+
+	if (RegCreateKeyEx(
+		HKEY_CURRENT_USER,
+		"Software\\Lizerium\\XMLUTF",
+		0,
+		NULL,
+		REG_OPTION_NON_VOLATILE,
+		KEY_WRITE,
+		NULL,
+		&hKey,
+		NULL
+	) == ERROR_SUCCESS)
+	{
+		RegSetValueEx(
+			hKey,
+			"SourcePath",
+			0,
+			REG_SZ,
+			reinterpret_cast<const BYTE*>((LPCSTR)m_SourcePath),
+			static_cast<DWORD>(m_SourcePath.GetLength() + 1)
+		);
+
+		RegCloseKey(hKey);
+	}
+}
+
+void XMLUTFDlg::OnBrowseDestinationPath()
+{
+	CString selectedPath;
+
+	if (!SelectFolderModern(m_hWnd, selectedPath))
+		return;
+
+	m_DestinationPath = selectedPath;
+	SetDlgItemText(IDC_DESTINATION_PATH, m_DestinationPath);
+
+	HKEY hKey = NULL;
+
+	if (RegCreateKeyEx(
+		HKEY_CURRENT_USER,
+		"Software\\Lizerium\\XMLUTF",
+		0,
+		NULL,
+		REG_OPTION_NON_VOLATILE,
+		KEY_WRITE,
+		NULL,
+		&hKey,
+		NULL
+	) == ERROR_SUCCESS)
+	{
+		RegSetValueEx(
+			hKey,
+			"DestPath",
+			0,
+			REG_SZ,
+			reinterpret_cast<const BYTE*>((LPCSTR)m_DestinationPath),
+			static_cast<DWORD>(m_DestinationPath.GetLength() + 1)
+		);
+
+		RegCloseKey(hKey);
+	}
+}
+
 BOOL XMLUTFDlg::OnInitDialog()
 {
 	CDialog::OnInitDialog();
-
-	// Add "About..." menu item to system menu.
 
 	// IDM_ABOUTBOX must be in the system command range.
 	ASSERT((IDM_ABOUTBOX & 0xFFF0) == IDM_ABOUTBOX);
 	ASSERT(IDM_ABOUTBOX < 0xF000);
 
+	// Add "About..." menu item to system menu.
 	CMenu* pSysMenu = GetSystemMenu(FALSE);
+
 	if (pSysMenu != NULL)
 	{
 		CString strAboutMenu;
 		strAboutMenu.LoadString(IDS_ABOUTBOX);
+
 		if (!strAboutMenu.IsEmpty())
 		{
 			pSysMenu->AppendMenu(MF_SEPARATOR);
@@ -356,162 +510,249 @@ BOOL XMLUTFDlg::OnInitDialog()
 		}
 	}
 
-	SetIcon(m_hIcon, TRUE); 		// Set big icon
-	SetIcon(m_hIcon, FALSE);		// Set small icon
+	SetIcon(m_hIcon, TRUE);
+	SetIcon(m_hIcon, FALSE);
 
-	// Initialize the Critical Section for the background conversion thread
+	// Initialize Critical Section.
 	InitializeCriticalSection(&m_Mutex);
-
-	char app_path[MAX_PATH];
-	char source_path[MAX_PATH];
-	char dest_path[MAX_PATH];
-
-	REGSAM sam = KEY_READ + KEY_WRITE;
-	DWORD Size;
-
-	HKEY hKey = NULL;
-	if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, FREELANCER_KEYPATH, 0, NULL, 0, sam, NULL, &hKey, NULL) != ERROR_SUCCESS)
-	{
-		CString msg = "Unable to create/open Freelancer's registry key.";
-		msg += "\n\nHKLM\\";
-		msg += FREELANCER_KEYPATH;
-		MessageBox(msg, "Error");
-		EndDialog(0);
-		return FALSE;
-	}
-
-	Size = sizeof(app_path);
-	if (RegQueryValueEx(hKey, "AppPath", 0, NULL, (BYTE *) app_path, &Size) != ERROR_SUCCESS)
-	{
-		BROWSEINFO bi;
-		bi.hwndOwner = NULL;
-		bi.pidlRoot = NULL;
-		bi.pszDisplayName = app_path;
-		bi.lpszTitle = "Select path to Freelancer...";
-		bi.ulFlags = 0;
-		bi.lpfn = NULL;
-		LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
-		if (pidl == NULL)
-		{
-			EndDialog(0);
-			return FALSE;
-		}
-		SHGetPathFromIDList(pidl, app_path);
-		CoTaskMemFree(pidl);
-		RegSetValueEx(hKey, "AppPath", 0, REG_SZ, (BYTE *) app_path, strlen(app_path));
-	}
-
-	Size = sizeof(source_path);
-	if (RegQueryValueEx( hKey, "XMLUTF SourcePath", 0, NULL, (BYTE *) source_path, &Size ) != ERROR_SUCCESS)
-	{
-		Size = sizeof(source_path);
-		if (RegQueryValueEx( hKey, "UTFXML DestPath", 0, NULL, (BYTE *) source_path, &Size ) != ERROR_SUCCESS)
-		{
-			strcpy(source_path, app_path);
-			strcat(source_path, "\\XML");
-		}
-		RegSetValueEx(hKey, "XMLUTF SourcePath", 0, REG_SZ, (BYTE *) source_path, strlen(source_path));
-	}
-
-	Size = sizeof(dest_path);
-	if (RegQueryValueEx( hKey, "XMLUTF DestPath", 0, NULL, (BYTE *) dest_path, &Size ) != ERROR_SUCCESS)
-	{
-		strcpy(dest_path, source_path);
-		int i = strlen(dest_path);
-		if (i >= 4 && STRIEQ(dest_path+i-4, "\\XML"))
-		{
-			i -= 4;
-		}
-		strcpy(dest_path+i, "\\UTF");
-		RegSetValueEx(hKey, "XMLUTF DestPath", 0, REG_SZ, (BYTE *) dest_path, strlen(dest_path));
-	}
-
-	RegCloseKey( hKey );
-
+	
+	// Command line
 	XMLUTFCommandLineInfo options;
-	//ParseCommandLine(options);
+
 	for (int a = 1; a < __argc; ++a)
 	{
 		LPCSTR arg = __argv[a];
 		BOOL flag = FALSE;
+
 		if (*arg == '-' || *arg == '/')
 		{
 			++arg;
 			flag = TRUE;
 		}
-		options.ParseParam(arg, flag, (a == __argc - 1));
+
+		options.ParseParam(
+			arg,
+			flag,
+			(a == __argc - 1)
+		);
 	}
 
+	// Paths / Registry
+	char source_path[MAX_PATH] = { 0 };
+	char dest_path[MAX_PATH]   = { 0 };
+
+	HKEY hKey = NULL;
+
+	LONG regResult = RegCreateKeyEx(
+		HKEY_CURRENT_USER,
+		"Software\\Lizerium\\XMLUTF",
+		0,
+		NULL,
+		REG_OPTION_NON_VOLATILE,
+		KEY_READ | KEY_WRITE,
+		NULL,
+		&hKey,
+		NULL
+	);
+
+	if (regResult != ERROR_SUCCESS)
+	{
+		MessageBox(
+			"Unable to create/open XMLUTF registry key.\n\n"
+			"HKCU\\Software\\Lizerium\\XMLUTF",
+			"Registry Error",
+			MB_ICONERROR
+		);
+
+		EndDialog(0);
+		return FALSE;
+	}
+
+	// Source Path
+	DWORD size = sizeof(source_path);
+	DWORD type = REG_SZ;
+
+	if (RegQueryValueEx(
+			hKey,
+			"SourcePath",
+			0,
+			&type,
+			reinterpret_cast<BYTE*>(source_path),
+			&size
+		) != ERROR_SUCCESS ||
+		source_path[0] == '\0')
+	{
+		CString selectedPath;
+
+		if (!SelectFolderModern(m_hWnd, selectedPath))
+		{
+			RegCloseKey(hKey);
+			EndDialog(0);
+			return FALSE;
+		}
+
+		strcpy_s(
+			source_path,
+			MAX_PATH,
+			(LPCSTR)selectedPath
+		);
+
+		RegSetValueEx(
+			hKey,
+			"SourcePath",
+			0,
+			REG_SZ,
+			reinterpret_cast<const BYTE*>(source_path),
+			static_cast<DWORD>(strlen(source_path) + 1)
+		);
+	}
+
+	// Destination Path
+	size = sizeof(dest_path);
+	type = REG_SZ;
+
+	if (RegQueryValueEx(
+			hKey,
+			"DestPath",
+			0,
+			&type,
+			reinterpret_cast<BYTE*>(dest_path),
+			&size
+		) != ERROR_SUCCESS ||
+		dest_path[0] == '\0')
+	{
+		strcpy_s(dest_path, source_path);
+
+		size_t len = strlen(dest_path);
+
+		if (len >= 4 &&
+			_stricmp(dest_path + len - 4, "\\XML") == 0)
+		{
+			dest_path[len - 4] = '\0';
+		}
+
+		strcat_s(dest_path, "\\UTF");
+
+		RegSetValueEx(
+			hKey,
+			"DestPath",
+			0,
+			REG_SZ,
+			reinterpret_cast<const BYTE*>(dest_path),
+			static_cast<DWORD>(strlen(dest_path) + 1)
+		);
+	}
+
+	RegCloseKey(hKey);
+	hKey = NULL;
+
+	// Command-line mode
 	m_Quiet = !options.src.IsEmpty();
+
 	if (m_Quiet)
 	{
-		LPSTR name;
-		GetFullPathName(options.src, MAX_PATH, source_path, &name);
+		LPSTR name = NULL;
+
+		GetFullPathName(
+			options.src,
+			MAX_PATH,
+			source_path,
+			&name
+		);
+
 		m_XmlFilenamesComboBox.SetWindowText(source_path);
+
 		if (name)
 			name[-1] = '\0';
+
+		if (!options.dest.IsEmpty())
+		{
+			GetFullPathName(
+				options.dest,
+				MAX_PATH,
+				dest_path,
+				NULL
+			);
+		}
 	}
 	else
 	{
+		// Normal GUI mode
+		m_XmlFilenamesComboBox.ResetContent();
 		m_XmlFilenamesComboBox.AddString("All XML files");
 		m_XmlFilenamesComboBox.SetCurSel(0);
+
+		m_XmlFilenames = "All XML files";
 	}
 
-	if (!options.dest.IsEmpty())
-	{
-		GetFullPathName(options.dest, MAX_PATH, dest_path, NULL);
-	}
-	else if (m_Quiet)
-	{
-		strcpy(dest_path, app_path);
-		strcat(dest_path, "\\DATA");
-	}
-
-	m_SourcePath = source_path;
+	// Apply values to UI
+	m_SourcePath      = source_path;
 	m_DestinationPath = dest_path;
 
-	SetDlgItemText(IDC_SOURCE_PATH,		 m_SourcePath);
-	SetDlgItemText(IDC_DESTINATION_PATH, m_DestinationPath);
+	SetDlgItemText(
+		IDC_SOURCE_PATH,
+		m_SourcePath
+	);
 
-	CheckDlgButton(IDC_RECURSIVE,		  TRUE);
-	CheckDlgButton(IDC_CREATE_SUBFOLDERS, options.subfolders);
+	SetDlgItemText(
+		IDC_DESTINATION_PATH,
+		m_DestinationPath
+	);
 
+	// Defaults
+	CheckDlgButton(
+		IDC_RECURSIVE,
+		TRUE
+	);
+
+	CheckDlgButton(
+		IDC_CREATE_SUBFOLDERS,
+		options.subfolders
+	);
+
+	// Quiet mode
 	if (m_Quiet)
 	{
 		OnConvert();
 		EndDialog(0);
 	}
 
-	return TRUE;  // return TRUE  unless you set the focus to a control
+	return TRUE;
 }
-
 
 BOOL XMLUTFDlg::DestroyWindow()
 {
-	// Make sure there is no conversion in progress
-	if (m_ConversionInProgress)
-	{
-		// Tell the conversion to abort
-		m_ConversionAborted = true;
+    m_ConversionAborted = true;
 
-		// Wait up to 5 seconds for the conversion to abort
-		int count = 50; // five seconds
-		while (m_ConversionInProgress && (count > 0))
-		{
-			// Wait 100 ms
-			Sleep(100);
-			count--;
-		}
-	}
+    if (m_pConversionThread)
+    {
+        if (m_pConversionThread->m_hThread)
+        {
+            WaitForSingleObject(
+                m_pConversionThread->m_hThread,
+                INFINITE
+            );
+        }
 
-	delete m_XmlDataBuffer;
-	delete m_string;
+        delete m_pConversionThread;
+        m_pConversionThread = NULL;
+    }
 
-	// We are done with the critical section mutex
-	DeleteCriticalSection(&m_Mutex);
+    if (m_XmlDataBuffer)
+    {
+        delete[] m_XmlDataBuffer;
+        m_XmlDataBuffer = NULL;
+    }
 
-	// Tell MFC to destroy this dialog
-	return CDialog::DestroyWindow();
+    if (m_string)
+    {
+        delete[] m_string;
+        m_string = NULL;
+    }
+
+    DeleteCriticalSection(&m_Mutex);
+
+    return CDialog::DestroyWindow();
 }
 
 
@@ -594,9 +835,15 @@ void XMLUTFDlg::OnBrowseXmlFilename()
 }
 
 
-void XMLUTFDlg::OnCancel() 
+void XMLUTFDlg::OnCancel()
 {
-	CDialog::OnCancel();
+    if (m_ConversionInProgress)
+    {
+        m_ConversionAborted = true;
+        return;
+    }
+
+    CDialog::OnCancel();
 }
 
 
@@ -657,16 +904,6 @@ void XMLUTFDlg::OnConvert()
 	fprintf(m_LogFile, "Source path: %s\n", source_path);
 	fprintf(m_LogFile, "Destination path: %s\n", m_CurrentDestinationPath);
 
-	if (!m_Quiet)
-	{
-		REGSAM sam = KEY_READ + KEY_WRITE;
-		HKEY hKey = NULL;
-		RegOpenKeyEx( HKEY_LOCAL_MACHINE, FREELANCER_KEYPATH, 0, sam, &hKey );
-		RegSetValueEx(hKey, "XMLUTF SourcePath", 0, REG_SZ, (BYTE *) source_path, strlen(source_path));
-		RegSetValueEx(hKey, "XMLUTF DestPath", 0, REG_SZ, (BYTE *) m_CurrentDestinationPath, strlen(m_CurrentDestinationPath));
-		RegCloseKey( hKey );
-	}
-
 	SetCurrentDirectory(m_SourcePath);
 
 	// Initialize variables
@@ -695,11 +932,55 @@ void XMLUTFDlg::OnConvert()
 		ShowWindow(SW_HIDE);
 
 		// Launch the background conversion thread
-		CWinThread *winthread = AfxBeginThread(BackgroundConversionThread, this, THREAD_PRIORITY_BELOW_NORMAL);
+		m_pConversionThread = AfxBeginThread(
+			BackgroundConversionThread,
+			this,
+			THREAD_PRIORITY_BELOW_NORMAL,
+			0,
+			CREATE_SUSPENDED
+		);
+
+		if (!m_pConversionThread)
+		{
+			m_ConversionInProgress = false;
+			ShowWindow(SW_NORMAL);
+
+			MessageBox(
+				"Unable to create conversion thread.",
+				"XMLUTF",
+				MB_ICONERROR
+			);
+
+			return;
+		}
+
+		// We do not allow MFC to automatically delete the CWinThread object.
+		m_pConversionThread->m_bAutoDelete = FALSE;
+
+		// We are launching the worker.
+		m_pConversionThread->ResumeThread();
 
 		// Display the progress bar
 		ProgressDialog progress(this);
 		progress.DoModal();
+
+		// ProgressDialog already closed,
+		// but the worker might still be alive theoretically.
+		if (m_pConversionThread)
+		{
+			if (m_pConversionThread->m_hThread)
+			{
+				WaitForSingleObject(
+					m_pConversionThread->m_hThread,
+					INFINITE
+				);
+			}
+
+			delete m_pConversionThread;
+			m_pConversionThread = NULL;
+		}
+
+		ShowWindow(SW_NORMAL);
 	}
 	else
 	{
@@ -750,6 +1031,10 @@ void XMLUTFDlg::OnConvert()
 
 UINT XMLUTFDlg::RunBackgroundConversionThread()
 {
+	Log("CRT max stdio before = %d\n", _getmaxstdio());
+	int newMax = _setmaxstdio(8192);
+	Log("CRT max stdio after = %d\n", newMax);
+
 	// Count all XML files in the folder
 	m_CountingXmlFiles = true;
 	ProcessFolder(".");
@@ -785,6 +1070,12 @@ void XMLUTFDlg::ProcessFolder(LPCSTR folder)
 	// Process all files in this directory
 	WIN32_FIND_DATA fdata;
 	HANDLE h = FindFirstFile("*", &fdata);
+
+	if (h == INVALID_HANDLE_VALUE)
+	{
+			return;
+	}
+
 	do
 	{
 		if (m_ConversionAborted)
@@ -832,6 +1123,8 @@ void XMLUTFDlg::ProcessFolder(LPCSTR folder)
 			}
 		}
 	} while (FindNextFile(h, &fdata));
+
+	FindClose(h);
 }
 
 
@@ -903,7 +1196,7 @@ void XMLUTFDlg::ProcessXmlFile(LPCSTR filename)
 				// segment to be put before the tree segment.
 				m_StringFirst = true;
 			}
-			delete string_first;
+			delete[] string_first;
 		}
 
 		m_PrePadData = false;
@@ -916,7 +1209,7 @@ void XMLUTFDlg::ProcessXmlFile(LPCSTR filename)
 				// to be preceeded with the DWORD 0xFFFFFFFF
 				m_PrePadData = true;
 			}
-			delete prepaddata;
+			delete[] prepaddata;
 		}
 
 		DWORD unk[3];
@@ -940,16 +1233,18 @@ void XMLUTFDlg::ProcessXmlFile(LPCSTR filename)
 		// Start at the base of the destination path
 		SetCurrentDirectory(m_DestinationPath);
 
-		// If the user wants to create subfolders
-		// and a path is specified
+		// If the user wants to create subfolders and a path is specified
+		// Create the folder(s) and set the current directory
 		if (m_CreateSubfolders && utf_path)
 		{
-			// Create the folder(s) and set the current directory
-			if (strnicmp(utf_path, "DATA\\", 5) == 0)
-			{
-				utf_path += 5;
-			}
-			CreateAndSetPath(utf_path);
+				const char *relative_path = utf_path;
+
+				if (_strnicmp(relative_path, "DATA\\", 5) == 0)
+				{
+						relative_path += 5;
+				}
+
+				CreateAndSetPath(relative_path);
 		}
 
 		// Create the UTF Root
@@ -989,9 +1284,39 @@ void XMLUTFDlg::ProcessXmlFile(LPCSTR filename)
 // Open an include file.
 void XMLUTFDlg::OpenIncludeFile(LPCSTR filename)
 {
-	char tmp_filename[MAX_PATH];
-	sprintf(tmp_filename, "%s\\%s", m_CurrentSourcePath, filename);
-	m_XmlFile = fopen(tmp_filename, "r");
+	CString tmp_filename;
+
+	tmp_filename.Format(
+			"%s\\%s",
+			m_CurrentSourcePath,
+			filename
+	);
+
+	Log(
+			"   DEBUG INCLUDE PATH: %s\n",
+			(LPCSTR)tmp_filename
+	);
+
+	m_XmlFile = fopen(
+			(LPCSTR)tmp_filename,
+			"r"
+	);
+
+	if (!m_XmlFile)
+	{
+			Log(
+					"   INCLUDE FOPEN FAILED: errno=%d path=%s\n",
+					errno,
+					(LPCSTR)tmp_filename
+			);
+
+			return;
+	}
+	Log(
+			"   INCLUDE OPEN OK: %s\n",
+				(LPCSTR)tmp_filename
+		);
+
 	if (m_XmlFile)
 	{
 		// Initialize variables
@@ -1297,9 +1622,9 @@ void XMLUTFDlg::WriteUtfFile(LPCSTR filename, DWORD *unk, FILETIME *ft)
 
 	// Free the memory allocated for arrays
 	m_StrMap.clear();
-	delete m_UtfStringArray;
-	delete m_UtfStringOffset;
-	delete m_UtfNode;
+	delete[] m_UtfStringArray;
+	delete[] m_UtfStringOffset;
+	delete[] m_UtfNode;
 }
 
 
@@ -1417,7 +1742,7 @@ void XMLUTFDlg::WriteUtfData(UTFNodeEntry *node)
 					{
 						Log("   Error writing data to UTF file\n");
 					}
-					delete data;
+					delete[] data;
 				}
 				else
 				{
@@ -1444,12 +1769,24 @@ void XMLUTFDlg::WriteUtfData(UTFNodeEntry *node)
 
 void XMLUTFDlg::CreateAndSetPath(const char * path)
 {
+	if (!path || !*path)
+			return;
+				
 	if (SetCurrentDirectory(path))
 		return;
 
-	char dir[MAX_PATH];
-	char *folder = dir;
-	strcpy(dir, path);
+	CString dir(path);
+
+	char* buffer = new char[dir.GetLength() + 1];
+
+	strcpy_s(
+			buffer,
+			dir.GetLength() + 1,
+			(LPCSTR)dir
+	);
+
+	char* folder = buffer;
+
 	// Skip over the root.
 	if (*folder == '\\')
 	{
@@ -1471,6 +1808,8 @@ void XMLUTFDlg::CreateAndSetPath(const char * path)
 		SetCurrentDirectory(folder);
 		folder = strtok(NULL, "\\");
 	}
+
+	delete[] buffer;
 }
 
 
@@ -1486,19 +1825,19 @@ void XMLUTFDlg::DestroyTree(UTFNodeEntry * branch)
 		}
 		if (branch->data)
 		{
-			delete branch->data;
+			delete[] branch->data;
 		}
 		if (branch->data_filename)
 		{
-			delete branch->data_filename;
+			delete[] branch->data_filename;
 		}
 		if (branch->data_path)
 		{
-			delete branch->data_path;
+			delete[] branch->data_path;
 		}
 		if (branch->name)
 		{
-			delete branch->name;
+			delete[] branch->name;
 		}
 		delete branch;
 		branch = next;
@@ -1508,19 +1847,28 @@ void XMLUTFDlg::DestroyTree(UTFNodeEntry * branch)
 
 void XMLUTFDlg::Log(char *format, ...)
 {
-	char buffer[512];
+    char buffer[2048] = {};
 
-	va_list args;
-	va_start(args, format);
-	vsprintf(buffer, format, args);
-	va_end(args);
+    va_list args;
+    va_start(args, format);
 
-	TRACE(buffer);
+    vsnprintf_s(
+        buffer,
+        sizeof(buffer),
+        _TRUNCATE,
+        format,
+        args
+    );
 
-	if (m_LogFile)
-	{
-		fprintf(m_LogFile, buffer);
-	}
+    va_end(args);
+
+    TRACE("%s", buffer);
+
+    if (m_LogFile)
+    {
+        fprintf(m_LogFile, "%s", buffer);
+        fflush(m_LogFile);
+    }
 }
 
 
@@ -1554,7 +1902,7 @@ void XMLUTFDlg::ProcessXmlBranch(UTFNodeEntry * pParentNode)
 			if (alt_name)
 			{
 				DWORD crc = CreateID(alt_name);
-				delete alt_name;
+				delete[] alt_name;
 				name = alt_name = new char[16];
 				sprintf(alt_name, "0x%08X", crc);
 			}
@@ -1674,8 +2022,8 @@ void XMLUTFDlg::ProcessXmlBranch(UTFNodeEntry * pParentNode)
 					m_XmlLineNumber = old_line_number;
 					m_XmlDataPtr = old_data_ptr;
 					strcpy(m_XmlDataBuffer, old_data_buffer);
-					delete old_data_buffer;
-					delete include;
+					delete[] old_data_buffer;
+					delete[] include;
 				}
 			}
 		}
@@ -1726,14 +2074,24 @@ void XMLUTFDlg::ProcessXmlLeaf(char *xml_name, char *name, char *type)
 		}
 
 		// Open the data file to determine its size
-		char tmp_filename[MAX_PATH];
-		sprintf(tmp_filename, "%s\\%s", m_CurrentSourcePath, data_filename);
-		FILE *f = fopen(tmp_filename, "rb");
+		CString tmp_filename;
+
+		tmp_filename.Format(
+				"%s\\%s",
+				m_CurrentSourcePath,
+				data_filename
+		);
+
+		FILE *f = fopen(
+				(LPCSTR)tmp_filename,
+				"r"
+		);
+
 		if (!f)
 		{
 			Log("   Error: Unable to open file '%s' (Line %d)\n", data_filename, m_XmlLineNumber);
 			m_AbortXmlFileProcessing = true;
-			delete data_filename;
+			delete[] data_filename;
 			return;
 		}
 
@@ -1746,8 +2104,14 @@ void XMLUTFDlg::ProcessXmlLeaf(char *xml_name, char *name, char *type)
 		m_LeafNode->data_filename = data_filename;
 		m_LeafNode->data_size	  = file_size;
 		m_LeafNode->data_alloc	  = (file_size + 3) & ~3;
-		m_LeafNode->data_path	  = new char[strlen(tmp_filename)+1];
-		strcpy(m_LeafNode->data_path, tmp_filename);
+		LPCSTR tmp_path = (LPCSTR)tmp_filename;
+
+		m_LeafNode->data_path = new char[strlen(tmp_path) + 1];
+		strcpy_s(
+				m_LeafNode->data_path,
+				strlen(tmp_path) + 1,
+				tmp_path
+		);
 
 		// Note: Don't release data_filename.
 		// It will be released when the tree is destroyed
@@ -1936,12 +2300,13 @@ void XMLUTFDlg::ProcessText()
 
 void XMLUTFDlg::ProcessByte()
 {
-	DWORD * data = new DWORD;
+	BYTE* data = new BYTE[4]();
+
 	m_LeafNode->data_size  = 1;
 	m_LeafNode->data_alloc = 4;
-	m_LeafNode->data = (BYTE *) data;
+	m_LeafNode->data = data;
 
-	*data = GetBYTE();
+	data[0] = GetBYTE();
 
 	BYTE junk;
 	if (GetByte(&junk))
@@ -1968,14 +2333,18 @@ void XMLUTFDlg::ProcessShort()
 
 void XMLUTFDlg::ProcessInt(int size)
 {
-	DWORD * data = new DWORD[size];
-	m_LeafNode->data_size  =
-	m_LeafNode->data_alloc = size * sizeof(DWORD);
-	m_LeafNode->data = (BYTE *) data;
+	DWORD bytes = size * sizeof(DWORD);
 
-	for (int i = 0; i < size; i++)
+	BYTE* raw = new BYTE[bytes];
+	DWORD* data = reinterpret_cast<DWORD*>(raw);
+
+	m_LeafNode->data_size  = bytes;
+	m_LeafNode->data_alloc = bytes;
+	m_LeafNode->data = raw;
+
+	for (int i = 0; i < size; ++i)
 	{
-		data[i] = GetDWORD();
+			data[i] = GetDWORD();
 	}
 
 	BYTE junk;
@@ -2187,7 +2556,7 @@ char * XMLUTFDlg::GetNumeric(bool is_float)
 			// successful
 			break;
 		}
-		else if (is_float && b == '°')
+		else if (is_float && b == 'ï¿½')
 		{
 			m_deg = true;
 		}
@@ -2225,7 +2594,7 @@ DWORD XMLUTFDlg::GetDWORD()
 	{
 		value = strtoul(data, 0, 0);
 	}
-	delete data;
+	delete[] data;
 
 	return (value);
 }
@@ -2288,7 +2657,7 @@ float XMLUTFDlg::GetFloat()
 	{
 		char *data = GetNumeric(true);
 		value = (float) atof(data);
-		delete data;
+		delete[] data;
 	}
 
 	if (m_deg)
@@ -2398,7 +2767,7 @@ DWORD XMLUTFDlg::GetHexAttr(char *attr)
 	if (hex)
 	{
 		value = strtoul(hex, 0, 0);
-		delete hex;
+		delete[] hex;
 	}
 	return (value);
 }
@@ -2411,7 +2780,7 @@ float XMLUTFDlg::GetFloatAttr(char *attr)
 	if (flt)
 	{
 		value = (float) atof(flt);
-		delete flt;
+		delete[] flt;
 	}
 	return (value);
 }
@@ -2431,7 +2800,7 @@ DWORD XMLUTFDlg::GetTimeAttr(char *attr)
 			value = ((st.wYear - 1980) << 9) | (st.wMonth << 5) | (st.wDay) |
 					(st.wHour << 27) | (st.wMinute << 21) | ((st.wSecond >> 1) << 16);
 		}
-		delete t;
+		delete[] t;
 	}
 	return (value);
 }
@@ -2453,7 +2822,7 @@ bool XMLUTFDlg::GetFileTimeAttr(char *attr, FILETIME& ft)
 			SystemTimeToFileTime(&st, &ft);
 			rc = true;
 		}
-		delete t;
+		delete[] t;
 	}
 	return (rc);
 }
@@ -2498,7 +2867,7 @@ char *XMLUTFDlg::GetString()
 	size_t len = end - name;
 	if (len > m_strcap)
 	{
-		delete m_string;
+		delete[] m_string;
 		m_string = new char[len+1];
 		m_strcap = len;
 	}

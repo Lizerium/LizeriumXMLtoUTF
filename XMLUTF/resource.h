@@ -20,6 +20,8 @@
 #define IDC_PATH                        1023
 #define IDC_STATUS                      1024
 #define IDC_PROGRAM_NAME                1025
+#define IDC_BROWSE_SOURCE_PATH          1101
+#define IDC_BROWSE_DESTINATION_PATH     1102
 
 // Next default values for new objects
 // 

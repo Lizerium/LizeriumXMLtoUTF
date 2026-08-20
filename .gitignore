@@ -1,3 +1,5 @@
+XMLUTF/Release
+XMLUTF/Debug
 pre_commit.log
 pre_commit.ps1
 
@@ -9,6 +11,7 @@ pre_commit.ps1
 *.user
 *.cache
 *.ipch
+*.aps
 
 # Prerequisites
 *.d
